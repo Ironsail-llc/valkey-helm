@@ -631,6 +631,10 @@ haproxy:
     #   memory: 128Mi
   config:
     checkInterval: 2s
+    # Role check on the write backend: how often HAProxy asks a server whether
+    # it is still the primary, and how long it waits for the answer.
+    masterCheckInterval: 1s
+    checkTimeout: 2s
     timeout:
       connect: 5s
       client: 1m

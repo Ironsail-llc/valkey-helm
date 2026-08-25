@@ -33,12 +33,30 @@ data:
 
     backend valkey_backend_master
       mode tcp
-      # no-check: sentinel-watcher solely controls which server is active via
-      # the runtime socket (set server addr + enable/disable server).
-      # This prevents HAProxy's own DNS resolver from putting servers into
-      # DNS NX maintenance, which cannot be cleared by enable server.
+      # The sentinel-watcher still picks the active server via the runtime
+      # socket, but it is no longer the only thing that knows the topology.
+      # A role check means HAProxy notices a demotion itself, within
+      # inter*fall, instead of routing writes at a node Sentinel already
+      # demoted -- those return -READONLY, which surfaces to users as a 500
+      # rather than a retryable connection error.
+      #
+      # Checking is safe here specifically because the watcher sets raw IPs
+      # via `set server addr`: no FQDN, so none of the DNS NX maintenance this
+      # backend originally avoided checks to dodge.
+      option tcp-check
+      tcp-check connect{{ if .Values.tls.enabled }} ssl{{ end }}
+      {{- if .Values.auth.enabled }}
+      tcp-check send AUTH\ {{ .Values.haproxy.sentinelWatcher.user | default "default" }}\ ${HAPROXY_CHECK_PASS}\r\n
+      tcp-check expect string +OK
+      {{- end }}
+      tcp-check send INFO\ replication\r\n
+      tcp-check expect string role:master
+      timeout check {{ .Values.haproxy.config.checkTimeout | default "2s" }}
       {{- range $i := until (add (int .Values.replica.replicas) 1 | int) }}
-      server valkey-{{ $i }} 127.0.0.1:6379 check-send-proxy disabled
+      {{- /* on-marked-down shutdown-sessions: phpredis holds persistent
+           connections, so without this an established session keeps being
+           proxied to the demoted primary well after HAProxy has switched. */}}
+      server valkey-{{ $i }} 127.0.0.1:6379 check inter {{ $.Values.haproxy.config.masterCheckInterval | default "1s" }} fall 2 rise 1 on-marked-down shutdown-sessions disabled
       {{- end }}
 
     backend valkey_backend_read
