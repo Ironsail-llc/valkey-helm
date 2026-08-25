@@ -637,6 +637,12 @@ haproxy:
       server: 1m
   securityContext: {}
   extraInitContainers: []
+  # HAProxy fronts the write path, so it deserves the same scheduling controls
+  # the StatefulSet already has -- otherwise every replica can land on one node.
+  nodeSelector: {}
+  affinity: {}
+  topologySpreadConstraints: []
+  tolerations: []
   extraVolumeMounts: []
   extraVolumes: []
   # Sentinel watcher sidecar: queries Sentinel for master changes and updates HAProxy

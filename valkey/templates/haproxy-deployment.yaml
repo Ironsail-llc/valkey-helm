@@ -34,6 +34,22 @@ spec:
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       serviceAccountName: {{ include "valkey.serviceAccountName" . }}
       {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
+      {{- with .Values.haproxy.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.haproxy.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.haproxy.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.haproxy.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.haproxy.extraInitContainers }}
       initContainers:
         {{- toYaml . | nindent 8 }}
