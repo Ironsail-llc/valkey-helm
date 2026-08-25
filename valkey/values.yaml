@@ -643,6 +643,10 @@ haproxy:
   # backend state via HAProxy's runtime socket, enabling near-instant failover.
   # Only deployed when replica.sentinel.enabled is true.
   sentinelWatcher:
+    # Seconds to wait when probing a Sentinel. Bounds the cost of a dead
+    # peer: without it valkey-cli blocks on SYN retries (~127s), so HAProxy
+    # keeps sending writes to a primary Sentinel already replaced.
+    connectTimeout: 1
     # Dedicated sentinel ACL user for the watcher. 
     # Must be defined in auth.sentinelAclUsers
     user: "default"

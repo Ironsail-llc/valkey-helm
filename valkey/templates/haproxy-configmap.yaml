@@ -112,7 +112,11 @@ data:
     {{- end }}
 
     # Base command assembly for Auth and TLS support
-    CLI_BASE="valkey-cli -p ${SENTINEL_PORT}"
+    # -t bounds the TCP connect. Without it, probing the sentinel on a pod
+    # that just died blocks on SYN retries (~127s by default), so HAProxy
+    # keeps routing writes at the dead primary long after Sentinel has
+    # already promoted a replica.
+    CLI_BASE="valkey-cli -p ${SENTINEL_PORT} -t {{ .Values.haproxy.sentinelWatcher.connectTimeout | default 1 }}"
     
     {{- if .Values.auth.enabled }}
     if [ "$WATCHER_USER" != "default" ]; then
