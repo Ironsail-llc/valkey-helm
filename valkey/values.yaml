@@ -415,10 +415,7 @@ affinity: {}
 # Set Deployment strategy. See https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
 deploymentStrategy: RollingUpdate # @schema enum:[RollingUpdate,Recreate]
 
-# StatefulSet podManagementPolicy. Empty means: Parallel when
-# replica.sentinel.enabled (pods must come up together to form quorum),
-# otherwise OrderedReady. The field is immutable, so an existing
-# StatefulSet cannot be flipped between the two without being recreated.
+# Empty = Parallel under sentinel, else OrderedReady. Immutable once set.
 podManagementPolicy: "" # @schema enum:["",Parallel,OrderedReady]
 
 # See https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints
@@ -631,8 +628,7 @@ haproxy:
     #   memory: 128Mi
   config:
     checkInterval: 2s
-    # Role check on the write backend: how often HAProxy asks a server whether
-    # it is still the primary, and how long it waits for the answer.
+    # Write-backend role check cadence.
     masterCheckInterval: 1s
     checkTimeout: 2s
     timeout:
@@ -641,8 +637,7 @@ haproxy:
       server: 1m
   securityContext: {}
   extraInitContainers: []
-  # HAProxy fronts the write path, so it deserves the same scheduling controls
-  # the StatefulSet already has -- otherwise every replica can land on one node.
+  # Scheduling controls; without them all replicas can land on one node.
   nodeSelector: {}
   affinity: {}
   topologySpreadConstraints: []
@@ -653,9 +648,7 @@ haproxy:
   # backend state via HAProxy's runtime socket, enabling near-instant failover.
   # Only deployed when replica.sentinel.enabled is true.
   sentinelWatcher:
-    # Seconds to wait when probing a Sentinel. Bounds the cost of a dead
-    # peer: without it valkey-cli blocks on SYN retries (~127s), so HAProxy
-    # keeps sending writes to a primary Sentinel already replaced.
+    # Probe timeout; bounds a dead peer to this instead of ~127s.
     connectTimeout: 1
     # Dedicated sentinel ACL user for the watcher. 
     # Must be defined in auth.sentinelAclUsers

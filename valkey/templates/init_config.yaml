@@ -172,21 +172,41 @@ data:
 
     POD_INDEX=${POD_INDEX:-0}
 
-    # 1. Determine Initial Topology or Restored State
+    # 1. Determine Initial Topology
     REPLICA_TARGET=""
     if [ "${SENTINEL_MODE:-false}" = "true" ]; then
-      if [ -n "$SAVED_REPLICA_LINE" ]; then
-        # CRITICAL: Restore topology written by Sentinel (CONFIG REWRITE)
-        log "Sentinel Mode: Restoring replication state from previous run: $SAVED_REPLICA_LINE"
-        REPLICA_TARGET="$SAVED_REPLICA_LINE"
+      # Ask Sentinel, don't restore this pod's saved replicaof: stale per-pod
+      # pointers can form a cycle on simultaneous restart (RD-1559).
+      MY_HOST="{{ include "valkey.fullname" . }}-${POD_INDEX}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+      MASTER_PORT="{{ .Values.service.port }}"
+      SENTINEL_MASTER=""
+
+      s=0
+      while [ "$s" -lt {{ add (int .Values.replica.replicas) 1 }} ]; do
+        PEER="{{ include "valkey.fullname" . }}-${s}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+        RESP=$(valkey-cli -h "$PEER" -p {{ .Values.replica.sentinel.port }} -t 2 sentinel get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} 2>/dev/null | head -n 1)
+        if [ -n "$RESP" ]; then
+          SENTINEL_MASTER="$RESP"
+          log "Sentinel quorum reports primary: $SENTINEL_MASTER (via $PEER)"
+          break
+        fi
+        s=$((s + 1))
+      done
+
+      if [ -n "$SENTINEL_MASTER" ]; then
+        if [ "$SENTINEL_MASTER" = "$MY_HOST" ]; then
+          log "Sentinel Mode: this node IS the primary, starting without replicaof"
+        else
+          REPLICA_TARGET="replicaof $SENTINEL_MASTER $MASTER_PORT"
+          log "Sentinel Mode: following current primary $SENTINEL_MASTER"
+        fi
       elif [ "$POD_INDEX" != "0" ]; then
-        # Fresh boot: Initial cluster assembly. Nodes > 0 follow node 0.
+        # Cold start: everyone follows node 0, so it cannot be circular.
         MASTER_HOST="{{ include "valkey.fullname" . }}-0.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-        MASTER_PORT="{{ .Values.service.port }}"
         REPLICA_TARGET="replicaof $MASTER_HOST $MASTER_PORT"
-        log "Sentinel Mode (Fresh): Node $POD_INDEX starting as replica of $MASTER_HOST"
+        log "Sentinel Mode (cold start): Node $POD_INDEX starting as replica of $MASTER_HOST"
       else
-        log "Sentinel Mode (Fresh): Node 0 starting as initial MASTER"
+        log "Sentinel Mode (cold start): Node 0 starting as initial PRIMARY"
       fi
     else
       # Standard Mode (Non-Sentinel)

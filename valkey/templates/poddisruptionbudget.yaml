@@ -15,9 +15,7 @@ spec:
     matchLabels:
       {{- include "valkey.selectorLabels" . | nindent 6 }}
     {{- if .Values.haproxy.enabled }}
-    {{- /* The HAProxy pods carry the same name/instance labels, so without
-         this the PDB covers them too and its minAvailable is satisfied by
-         HAProxy while every StatefulSet pod is drained. */}}
+    {{- /* HAProxy shares these labels; without this the PDB covers it too. */}}
     matchExpressions:
       - key: app.kubernetes.io/component
         operator: NotIn

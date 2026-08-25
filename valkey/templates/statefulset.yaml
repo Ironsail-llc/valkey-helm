@@ -15,9 +15,7 @@ metadata:
 spec:
   serviceName: {{ include "valkey.fullname" . }}-headless
   replicas: {{ add (int .Values.replica.replicas) 1 }}
-  {{- /* Sentinel needs pods up together to form quorum; without it keep
-       upstream's OrderedReady, since this field is immutable and flipping it
-       on an existing StatefulSet is rejected by the API server. */}}
+  {{- /* Parallel for sentinel quorum; the field is immutable once set. */}}
   {{- $pmp := ternary "Parallel" "OrderedReady" (default false .Values.replica.sentinel.enabled) }}
   podManagementPolicy: {{ default $pmp .Values.podManagementPolicy }}
   {{- if .Values.replica.persistentVolumeClaimRetentionPolicy }}
