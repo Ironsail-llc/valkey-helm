@@ -415,6 +415,12 @@ affinity: {}
 # Set Deployment strategy. See https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
 deploymentStrategy: RollingUpdate # @schema enum:[RollingUpdate,Recreate]
 
+# StatefulSet podManagementPolicy. Empty means: Parallel when
+# replica.sentinel.enabled (pods must come up together to form quorum),
+# otherwise OrderedReady. The field is immutable, so an existing
+# StatefulSet cannot be flipped between the two without being recreated.
+podManagementPolicy: "" # @schema enum:["",Parallel,OrderedReady]
+
 # See https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints
 topologySpreadConstraints: []
 
