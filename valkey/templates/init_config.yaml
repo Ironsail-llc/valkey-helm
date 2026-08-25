@@ -181,17 +181,39 @@ data:
       MASTER_PORT="{{ .Values.service.port }}"
       SENTINEL_MASTER=""
 
-      s=0
-      while [ "$s" -lt {{ add (int .Values.replica.replicas) 1 }} ]; do
-        PEER="{{ include "valkey.fullname" . }}-${s}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
-        RESP=$(valkey-cli -h "$PEER" -p {{ .Values.replica.sentinel.port }} -t 2 sentinel get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} 2>/dev/null | head -n 1)
-        if [ -n "$RESP" ]; then
-          SENTINEL_MASTER="$RESP"
-          log "Sentinel quorum reports primary: $SENTINEL_MASTER (via $PEER)"
-          break
-        fi
-        s=$((s + 1))
-      done
+      ask_sentinel() {
+        s=0
+        while [ "$s" -lt {{ add (int .Values.replica.replicas) 1 }} ]; do
+          PEER="{{ include "valkey.fullname" . }}-${s}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+          RESP=$(valkey-cli -h "$PEER" -p {{ .Values.replica.sentinel.port }} -t 2 sentinel get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} 2>/dev/null | head -n 1)
+          if [ -n "$RESP" ]; then
+            echo "$RESP"
+            return 0
+          fi
+          s=$((s + 1))
+        done
+        return 1
+      }
+
+      SENTINEL_MASTER=$(ask_sentinel)
+      [ -n "$SENTINEL_MASTER" ] && log "Sentinel quorum reports primary: $SENTINEL_MASTER"
+
+      # Sentinel still naming us is stale right after a hard restart: we are back
+      # before it detected our death, and claiming primacy loses writes (RD-1559).
+      if [ -n "$SENTINEL_MASTER" ] && [ "$SENTINEL_MASTER" = "$MY_HOST" ]; then
+        log "Sentinel names this node; waiting up to {{ .Values.replica.sentinel.staleMasterConfirmSeconds }}s for a failover before claiming primacy"
+        w=0
+        while [ "$w" -lt {{ .Values.replica.sentinel.staleMasterConfirmSeconds }} ]; do
+          sleep 1
+          w=$((w + 1))
+          RESP=$(ask_sentinel)
+          if [ -n "$RESP" ] && [ "$RESP" != "$MY_HOST" ]; then
+            SENTINEL_MASTER="$RESP"
+            log "Sentinel failed over to $SENTINEL_MASTER after ${w}s; following it"
+            break
+          fi
+        done
+      fi
 
       if [ -n "$SENTINEL_MASTER" ]; then
         if [ "$SENTINEL_MASTER" = "$MY_HOST" ]; then

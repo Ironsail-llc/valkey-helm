@@ -341,6 +341,9 @@ replica:
 
     # Time in milliseconds before sentinel considers an instance down
     downAfterMilliseconds: 5000
+    # Wait before a restarted pod trusts Sentinel naming it primary; must exceed
+    # downAfterMilliseconds + failoverTimeout or it claims primacy on stale state.
+    staleMasterConfirmSeconds: 20
     # Promote to a replica before the pod exits, so planned disruptions
     # (rollouts, drains, evictions) cost no failed writes.
     gracefulHandover:
