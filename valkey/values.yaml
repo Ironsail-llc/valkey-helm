@@ -341,6 +341,11 @@ replica:
 
     # Time in milliseconds before sentinel considers an instance down
     downAfterMilliseconds: 5000
+    # Promote to a replica before the pod exits, so planned disruptions
+    # (rollouts, drains, evictions) cost no failed writes.
+    gracefulHandover:
+      enabled: true
+      timeoutSeconds: 20
 
     # Timeout for failover operation in milliseconds
     failoverTimeout: 10000
@@ -414,6 +419,9 @@ affinity: {}
 
 # Set Deployment strategy. See https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
 deploymentStrategy: RollingUpdate # @schema enum:[RollingUpdate,Recreate]
+
+# Must exceed sentinel.gracefulHandover.timeoutSeconds or the handover is cut short.
+terminationGracePeriodSeconds: 40
 
 # Empty = Parallel under sentinel, else OrderedReady. Immutable once set.
 podManagementPolicy: "" # @schema enum:["",Parallel,OrderedReady]

@@ -73,6 +73,9 @@ spec:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 32 | quote }}
         {{- end }}
     spec:
+      {{- with .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
       {{- (include "valkey.imagePullSecrets" .) | nindent 6 }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       serviceAccountName: {{ include "valkey.serviceAccountName" . }}
@@ -191,6 +194,29 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: [ "valkey-server" ]
           args: [ "/data/conf/valkey.conf" ]
+          {{- if and .Values.replica.sentinel.enabled .Values.replica.sentinel.gracefulHandover.enabled }}
+          # Hand the primary role over before dying, so a planned disruption
+          # costs no failed writes (RD-1559).
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    ME="{{ include "valkey.fullname" . }}-${POD_INDEX}.{{ include "valkey.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
+                    S="valkey-cli -p {{ .Values.replica.sentinel.port }} -t 2"
+                    CUR=$($S sentinel get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} 2>/dev/null | head -n 1)
+                    if [ "$CUR" != "$ME" ]; then exit 0; fi
+                    $S sentinel failover {{ .Values.replica.sentinel.masterSet }} >/dev/null 2>&1
+                    n=0
+                    while [ "$n" -lt {{ .Values.replica.sentinel.gracefulHandover.timeoutSeconds }} ]; do
+                      NEW=$($S sentinel get-master-addr-by-name {{ .Values.replica.sentinel.masterSet }} 2>/dev/null | head -n 1)
+                      if [ -n "$NEW" ] && [ "$NEW" != "$ME" ]; then exit 0; fi
+                      sleep 1
+                      n=$((n + 1))
+                    done
+          {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
