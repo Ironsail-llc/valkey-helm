@@ -12,7 +12,7 @@ on:
 
 jobs:
   check-version-change:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version_changed: ${{ steps.check.outputs.version_changed }}
     steps:
@@ -46,7 +46,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
